@@ -335,7 +335,9 @@ func (m *Model) cancelThemeSelect() {
 	m.themeSel.active = false
 	m.themeSel.filter = ""
 	m.styles = m.themeSel.origStyles
-	m.highlighter.SetStyle(m.themeSel.origChroma)
+	if !m.highlighter.SetStyle(m.themeSel.origChroma) {
+		log.Printf("[WARN] failed to restore chroma style %q", m.themeSel.origChroma)
+	}
 	m.refreshDiff()
 }
 
