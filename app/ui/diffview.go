@@ -124,12 +124,9 @@ func (m Model) gutterBlanks() (numBlank, blameBlank string) {
 	return numBlank, blameBlank
 }
 
-// applyHorizontalScroll applies horizontal scroll offset to content, subtracting gutter widths.
-// no-op when scroll offset is zero.
+// applyHorizontalScroll truncates content to the diff content width and applies horizontal scroll offset.
+// always truncates even when scroll offset is zero to prevent long lines from overflowing the right padding.
 func (m Model) applyHorizontalScroll(content string) string {
-	if m.scrollX <= 0 {
-		return content
-	}
 	cutWidth := m.diffContentWidth() - m.gutterExtra()
 	if cutWidth > 0 {
 		return ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -212,6 +213,21 @@ func TestModel_RenderDiffLineTabReplacement(t *testing.T) {
 	output := m.renderDiff()
 	assert.Contains(t, output, "    foo", "tabs should be replaced with spaces")
 	assert.NotContains(t, output, "\t", "no raw tabs should remain")
+}
+
+func TestModel_ApplyHorizontalScrollTruncatesLongLines(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 0
+
+	// content wider than diffContentWidth should be truncated
+	longContent := strings.Repeat("x", 200)
+	result := m.applyHorizontalScroll(longContent)
+	maxWidth := m.diffContentWidth() - m.gutterExtra()
+	resultWidth := lipgloss.Width(result)
+	assert.LessOrEqual(t, resultWidth, maxWidth, "long line should be truncated to content width even with scrollX=0")
 }
 
 func TestModel_PlainStyles(t *testing.T) {
