@@ -363,7 +363,7 @@ func (m Model) statusModeIcons() string {
 		{"#", m.lineNumbers},
 		{"b", m.showBlame},
 		{"✓", m.tree.reviewedCount() > 0},
-		{"?", m.showUntracked},
+		{"∅", m.showUntracked},
 	}
 
 	mutedSeq := m.ansiFg(m.styles.colors.Muted)

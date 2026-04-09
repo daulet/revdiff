@@ -291,15 +291,13 @@ func TestModel_UntrackedToggle(t *testing.T) {
 		assert.False(t, result.(Model).showUntracked)
 	})
 
-	t.Run("status bar shows ? icon when untracked is on", func(t *testing.T) {
+	t.Run("status bar shows untracked icon when untracked is on", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
-		// ? is always in the icons list but inactive (muted) when showUntracked is false
-		// check that ? becomes active when toggled
-		// icons always contain ?
-		// find ? position and verify it's muted (not the active color pattern)
+		// ∅ is always in the icons list but inactive (muted) when showUntracked is false
+		// check that ∅ becomes active when toggled
 		m.showUntracked = true
 		iconsActive := m.statusModeIcons()
-		assert.Contains(t, iconsActive, "?")
+		assert.Contains(t, iconsActive, "∅")
 	})
 
 	t.Run("no untracked files when LoadUntracked is nil", func(t *testing.T) {
