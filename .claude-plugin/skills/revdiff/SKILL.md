@@ -67,9 +67,12 @@ ${CLAUDE_SKILL_DIR}/scripts/detect-ref.sh
 ```
 
 The script outputs structured fields:
-- `branch`, `main_branch`, `is_main`, `has_uncommitted`
+- `branch`, `main_branch`, `is_main`, `has_uncommitted`, `has_staged_only`
 - `suggested_ref` — the ref to pass to revdiff (empty = uncommitted changes)
+- `use_staged` — if `true`, pass `--staged` to the launcher (staged-only changes detected)
 - `needs_ask` — if `true`, ask the user before proceeding
+
+**When `use_staged: true`**, pass `--staged` to the launcher. This means all changes are in the index (staged) with nothing unstaged — without `--staged`, revdiff would show an empty diff.
 
 **When `needs_ask: true`** (on a feature branch with uncommitted changes), use AskUserQuestion:
 - **"Uncommitted only"** — pass no ref (review just working changes)
@@ -77,6 +80,7 @@ The script outputs structured fields:
 
 **When `needs_ask: false`**, use `suggested_ref` directly:
 - On main + uncommitted → no ref (uncommitted changes)
+- On main + staged only → no ref + `--staged` (staged changes)
 - On main + clean → `HEAD~1` (last commit)
 - On feature branch + clean → main branch name (full branch diff)
 
