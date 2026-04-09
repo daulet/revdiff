@@ -141,25 +141,18 @@ Split annotations into two categories:
 
 **If explanation requests are found:**
 
-1. Answer each explanation request — read the referenced code, provide a clear answer
-2. If there are also code-change directives in the same batch, list them as pending
-3. Use AskUserQuestion:
+1. Answer each explanation request — read the referenced code, generate a clear markdown explanation
+2. If there are also code-change directives in the same batch, note them as pending (they carry over to Step 4 after the explanation loop)
+3. Enter the **explanation loop**:
 
-```json
-{
-  "question": "Explanations shown above. How to proceed?",
-  "options": [
-    {"label": "Continue review", "description": "Re-launch revdiff to continue reviewing"},
-    {"label": "Address as change request", "description": "Treat explanation annotations as change directives instead"},
-    {"label": "Exit review", "description": "Stop the review loop"}
-  ],
-  "default": "Continue review"
-}
-```
+   a. Write the explanation to a temp markdown file (e.g., `/tmp/revdiff-explain-XXXXXX.md`)
+   b. Launch revdiff with `--only=/tmp/revdiff-explain-XXXXXX.md` via the launcher script — this opens the explanation as a scrollable markdown view with TOC sidebar
+   c. **If user quits without annotations** → explanation accepted, clean up temp file, proceed:
+      - If pending code-change directives exist → go to Step 4
+      - Otherwise → go to Step 6 (re-launch revdiff with the original diff ref)
+   d. **If user annotates the explanation** → these are follow-up questions or clarification requests. Read the annotations, refine/extend the explanation markdown, write updated temp file, go back to step (b)
 
-- **Continue review** → go to Step 6 (re-launch revdiff). Any pending code-change directives from the same batch carry over to Step 4 first.
-- **Address as change request** → reclassify explanation annotations as directives, merge with any other directives, proceed to Step 4
-- **Exit review** → go to Step 7
+The explanation loop continues until the user quits without annotating. This allows a natural back-and-forth dialogue where the user can ask for more detail or corrections on specific parts of the explanation.
 
 **If no explanation requests** — all annotations are code-change directives, proceed directly to Step 4.
 
@@ -206,10 +199,15 @@ User: "revdiff HEAD~3"
 → user annotates: "server.go:72 - explain what this mutex protects"
 → user quits
 → annotation classified as explanation request (starts with "explain")
-→ Claude reads server.go:72, explains the mutex purpose
-→ AskUserQuestion: "Continue review" / "Address as change request" / "Exit review"
-→ user picks "Continue review"
-→ re-launch revdiff HEAD~3
+→ Claude reads server.go:72, generates markdown explanation
+→ writes to /tmp/revdiff-explain-XXXXXX.md
+→ launch revdiff --only=/tmp/revdiff-explain-XXXXXX.md (explanation view with TOC)
+→ user reads explanation, annotates: "what about the race condition on line 80?"
+→ Claude refines explanation, rewrites temp file
+→ re-launch revdiff --only=/tmp/revdiff-explain-XXXXXX.md
+→ user reads updated explanation, quits without annotations
+→ explanation accepted, clean up temp file
+→ re-launch revdiff HEAD~3 (back to diff review)
 → user quits without annotations
 → "review complete"
 ```
