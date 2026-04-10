@@ -79,6 +79,7 @@
         <a href="#search">Search</a>
         <a href="#annotations">Annotations</a>
         <a href="#view">View toggles</a>
+        <a href="#status-bar-icons">Status bar icons</a>
         <a href="#custom-keys">Custom keybindings</a>
 
         <h4>Claude Code plugin</h4>
@@ -455,6 +456,25 @@ color-border = #6272a4
                 <tr><td><code>Q</code></td><td>Discard annotations and quit</td></tr>
             </tbody>
         </table>
+
+        <h2 id="status-bar-icons">Status bar icons</h2>
+        <p>The status bar shows a fixed row of mode indicators on the right side. All ten slots are always rendered &mdash; active modes use the status bar foreground color, inactive modes use muted gray, so the row occupies the same width regardless of what's toggled on.</p>
+        <table>
+            <thead><tr><th>Icon</th><th>Toggle</th><th>Meaning</th></tr></thead>
+            <tbody>
+                <tr><td><code>▼</code></td><td><code>v</code></td><td>Collapsed diff mode</td></tr>
+                <tr><td><code>◉</code></td><td><code>f</code></td><td>Filter: annotated files only</td></tr>
+                <tr><td><code>↩</code></td><td><code>w</code></td><td>Word wrap mode</td></tr>
+                <tr><td><code>≋</code></td><td><code>/</code></td><td>Search active</td></tr>
+                <tr><td><code>⊟</code></td><td><code>t</code></td><td>Tree/TOC pane hidden (diff uses full width)</td></tr>
+                <tr><td><code>#</code></td><td><code>L</code></td><td>Line numbers visible in gutter</td></tr>
+                <tr><td><code>b</code></td><td><code>B</code></td><td>Git blame gutter visible</td></tr>
+                <tr><td><code>±</code></td><td><code>W</code></td><td>Intra-line word-diff highlighting</td></tr>
+                <tr><td><code>✓</code></td><td><code>Space</code></td><td>Reviewed count (increments when a file is marked reviewed)</td></tr>
+                <tr><td><code>∅</code></td><td><code>u</code></td><td>Untracked files visible in tree</td></tr>
+            </tbody>
+        </table>
+        <p>On narrow terminals, the left-hand segments are dropped before the icons: search position first, then line and hunk info, then the filename truncates. The icon row on the right stays put.</p>
 
         <h2 id="custom-keys">Custom keybindings</h2>
         <p>All keybindings can be customized via <code>~/.config/revdiff/keybindings</code>. Override path with <code>--keys</code> or <code>REVDIFF_KEYS</code>.</p>

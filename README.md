@@ -550,6 +550,25 @@ Override the history directory with `--history-dir`, `REVDIFF_HISTORY_DIR` env v
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |
 
+### Status Bar Icons
+
+The status bar shows a fixed row of mode indicators on the right side. All ten slots are always rendered — active modes use the status bar foreground color, inactive modes use muted gray, so the row occupies the same width regardless of what's toggled on.
+
+| Icon | Toggle | Meaning |
+|------|--------|---------|
+| `▼` | `v` | Collapsed diff mode |
+| `◉` | `f` | Filter: annotated files only |
+| `↩` | `w` | Word wrap mode |
+| `≋` | `/` | Search active |
+| `⊟` | `t` | Tree/TOC pane hidden (diff uses full width) |
+| `#` | `L` | Line numbers visible in gutter |
+| `b` | `B` | Git blame gutter visible |
+| `±` | `W` | Intra-line word-diff highlighting |
+| `✓` | `Space` | Reviewed count (increments when a file is marked reviewed) |
+| `∅` | `u` | Untracked files visible in tree |
+
+On narrow terminals, the left-hand segments are dropped before the icons: search position first, then line and hunk info, then the filename truncates. The icon row on the right stays put.
+
 ### Custom Keybindings
 
 All keybindings can be customized via a keybindings file at `~/.config/revdiff/keybindings`. Override the path with `--keys` flag or `REVDIFF_KEYS` env var.
