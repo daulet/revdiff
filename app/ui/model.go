@@ -37,7 +37,7 @@ type SyntaxHighlighter interface {
 	StyleName() string
 }
 
-// Blamer provides git blame information for files.
+// Blamer provides blame information for files.
 type Blamer interface {
 	FileBlame(ref, file string, staged bool) (map[int]diff.BlameLine, error)
 }
