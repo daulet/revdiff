@@ -14,16 +14,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
       - name: set up go 1.26
         uses: actions/setup-go@v6
         with:
           go-version: "1.26"
         id: go
-
-      - name: checkout
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
 
       - name: build and test
         run: |
@@ -33,7 +33,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: "v2.11.4"
 
       - name: install goveralls
         run: go install github.com/mattn/goveralls@latest
