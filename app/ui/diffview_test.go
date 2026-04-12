@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/mattn/go-runewidth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -53,6 +54,108 @@ func TestModel_LineNumGutter(t *testing.T) {
 			got := m.lineNumGutter(tt.dl)
 			stripped := ansi.Strip(got)
 			assert.Equal(t, tt.want, stripped)
+		})
+	}
+}
+
+func TestModel_LineNumGutter_SingleColumn(t *testing.T) {
+	m := testModel(nil, nil)
+	m.lineNumbers = true
+	m.lineNumWidth = 3
+	m.singleColLineNum = true
+
+	tests := []struct {
+		name string
+		dl   diff.DiffLine
+		want string // plain text content (ANSI stripped)
+	}{
+		{
+			name: "context line",
+			dl:   diff.DiffLine{OldNum: 25, NewNum: 32, ChangeType: diff.ChangeContext},
+			want: "  32", // " " + " 32"
+		},
+		{
+			name: "divider",
+			dl:   diff.DiffLine{ChangeType: diff.ChangeDivider},
+			want: "    ", // " " + "   "
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := m.lineNumGutter(tt.dl)
+			stripped := ansi.Strip(got)
+			assert.Equal(t, tt.want, stripped)
+		})
+	}
+}
+
+func TestModel_LineNumGutter_TwoColumnUnchanged(t *testing.T) {
+	m := testModel(nil, nil)
+	m.lineNumbers = true
+	m.lineNumWidth = 3
+	m.singleColLineNum = false
+
+	tests := []struct {
+		name string
+		dl   diff.DiffLine
+		want string
+	}{
+		{
+			name: "context line",
+			dl:   diff.DiffLine{OldNum: 25, NewNum: 32, ChangeType: diff.ChangeContext},
+			want: "  25  32",
+		},
+		{
+			name: "add line",
+			dl:   diff.DiffLine{OldNum: 0, NewNum: 40, ChangeType: diff.ChangeAdd},
+			want: "      40",
+		},
+		{
+			name: "remove line",
+			dl:   diff.DiffLine{OldNum: 40, NewNum: 0, ChangeType: diff.ChangeRemove},
+			want: "  40    ",
+		},
+		{
+			name: "divider",
+			dl:   diff.DiffLine{ChangeType: diff.ChangeDivider},
+			want: "        ",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := m.lineNumGutter(tt.dl)
+			stripped := ansi.Strip(got)
+			assert.Equal(t, tt.want, stripped)
+		})
+	}
+}
+
+func TestModel_LineNumGutter_WidthConsistency(t *testing.T) {
+	// width-consistency: runewidth.StringWidth(stripped gutter) == lineNumGutterWidth()
+	// for representative DiffLine values in both single-column and two-column modes
+	tests := []struct {
+		name      string
+		singleCol bool
+		dl        diff.DiffLine
+	}{
+		{"single-col context", true, diff.DiffLine{OldNum: 10, NewNum: 10, ChangeType: diff.ChangeContext}},
+		{"single-col divider", true, diff.DiffLine{ChangeType: diff.ChangeDivider}},
+		{"two-col context", false, diff.DiffLine{OldNum: 10, NewNum: 20, ChangeType: diff.ChangeContext}},
+		{"two-col add", false, diff.DiffLine{OldNum: 0, NewNum: 5, ChangeType: diff.ChangeAdd}},
+		{"two-col remove", false, diff.DiffLine{OldNum: 5, NewNum: 0, ChangeType: diff.ChangeRemove}},
+		{"two-col divider", false, diff.DiffLine{ChangeType: diff.ChangeDivider}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.lineNumWidth = 3
+			m.singleColLineNum = tt.singleCol
+			got := m.lineNumGutter(tt.dl)
+			stripped := ansi.Strip(got)
+			assert.Equal(t, m.lineNumGutterWidth(), runewidth.StringWidth(stripped),
+				"gutter width mismatch: got %q (width %d), want %d",
+				stripped, runewidth.StringWidth(stripped), m.lineNumGutterWidth())
 		})
 	}
 }
@@ -121,6 +224,32 @@ func TestModel_LineNumGutterWidth(t *testing.T) {
 	m.lineNumWidth = 1
 	// width = 1 + 1 + 1 + 1 = 4
 	assert.Equal(t, 4, m.lineNumGutterWidth())
+}
+
+func TestModel_LineNumGutterWidth_SingleColumn(t *testing.T) {
+	m := testModel(nil, nil)
+	m.singleColLineNum = true
+
+	m.lineNumWidth = 3
+	// single-column: " " + num(3) = 4
+	assert.Equal(t, 4, m.lineNumGutterWidth())
+
+	m.lineNumWidth = 1
+	// single-column: " " + num(1) = 2
+	assert.Equal(t, 2, m.lineNumGutterWidth())
+}
+
+func TestModel_LineNumGutterWidth_TwoColumnWhenNotSingleCol(t *testing.T) {
+	m := testModel(nil, nil)
+	m.singleColLineNum = false
+
+	m.lineNumWidth = 3
+	// two-column: " " + old(3) + " " + new(3) = 8
+	assert.Equal(t, 8, m.lineNumGutterWidth())
+
+	m.lineNumWidth = 2
+	// two-column: " " + old(2) + " " + new(2) = 6
+	assert.Equal(t, 6, m.lineNumGutterWidth())
 }
 
 func TestModel_RenderDiffEmpty(t *testing.T) {

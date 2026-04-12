@@ -165,9 +165,11 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.scrollX = 0
 	m.collapsed.expandedHunks = make(map[int]bool)
 
+	m.singleColLineNum = m.isFullContext(msg.lines)
+
 	// detect markdown full-context mode and build TOC
 	m.mdTOC = nil
-	if m.singleFile && m.isMarkdownFile(msg.file) && m.isFullContext(msg.lines) {
+	if m.singleFile && m.isMarkdownFile(msg.file) && m.singleColLineNum {
 		m.mdTOC = m.parseTOC(msg.lines, msg.file)
 	}
 	switch {

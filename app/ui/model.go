@@ -201,11 +201,12 @@ type Model struct {
 	fileAdds    int // cached count of added lines in current file
 	fileRemoves int // cached count of removed lines in current file
 
-	showHelp       bool // true when help overlay is visible
-	wrapMode       bool // true when line wrapping is enabled
-	crossFileHunks bool // allow [ and ] to jump across file boundaries
-	lineNumbers    bool // true when line numbers are shown in gutter
-	lineNumWidth   int  // digit width for line number columns (max digits across old/new nums)
+	showHelp         bool // true when help overlay is visible
+	wrapMode         bool // true when line wrapping is enabled
+	crossFileHunks   bool // allow [ and ] to jump across file boundaries
+	lineNumbers      bool // true when line numbers are shown in gutter
+	lineNumWidth     int  // digit width for line number columns (max digits across old/new nums)
+	singleColLineNum bool // true for full-context files: render one line-number column instead of two
 
 	wordDiff       bool                     // true when intra-line word-diff highlighting is enabled
 	blamer         Blamer                   // optional blame provider (nil when git unavailable)
