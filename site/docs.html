@@ -540,6 +540,9 @@ unmap q</code></div>
             </tbody>
         </table>
         <p>Priority: tmux &rarr; zellij &rarr; kitty &rarr; wezterm/kaku &rarr; cmux &rarr; ghostty &rarr; iTerm2 &rarr; Emacs vterm (first detected wins). cmux is checked before ghostty because it also sets <code>$TERM_PROGRAM=ghostty</code>. iTerm2 uses a split pane rather than a full-screen overlay.</p>
+        <p><strong>Sandbox note:</strong> Ghostty and iTerm2 launchers use <code>osascript</code> (Apple Events), which is blocked by Claude Code's sandbox. If you use these terminals with sandbox enabled, add the launcher to <code>excludedCommands</code> in your Claude Code <code>settings.json</code>:</p>
+        <div class="code-block"><code>{ "permissions": { "excludedCommands": ["*/launch-revdiff.sh*"] } }</code></div>
+        <p>Terminals that use CLI tools instead of AppleScript (tmux, Zellij, kitty, wezterm, cmux) are not affected.</p>
 
         <h2 id="plugin-usage">Plugin usage</h2>
         <h3>Slash commands</h3>

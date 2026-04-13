@@ -93,6 +93,18 @@ Priority: tmux → Zellij → kitty → wezterm/Kaku → cmux → ghostty → iT
 
 > **Note:** iTerm2 uses a split pane (vertical or horizontal, auto-detected from terminal dimensions) rather than a full-screen overlay. The iTerm2 AppleScript API does not expose a zoom command, so the split view shares screen space with the invoking session.
 
+> **Note:** Ghostty and iTerm2 launchers use `osascript` (Apple Events), which is blocked by Claude Code's sandbox. If you use these terminals with sandbox enabled, add the launcher to `excludedCommands` in your Claude Code `settings.json`:
+>
+> ```json
+> {
+>   "permissions": {
+>     "excludedCommands": ["*/launch-revdiff.sh*"]
+>   }
+> }
+> ```
+>
+> Terminals that use CLI tools instead of AppleScript (tmux, Zellij, kitty, wezterm, cmux) are not affected.
+
 **Install:**
 
 ```bash
