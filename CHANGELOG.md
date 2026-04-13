@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.18.0 - 2026-04-13
+
+### New Features
+
+- add `--include` prefix filter flag #103 @rashpile
+- opencode config docs #41 @hackmajoris
+
+### Improvements
+
+- add AUR install instructions #101 @kovstas
+- extract overlay sub-package from model #99 @umputun
+- add sandbox workaround for Ghostty and iTerm2 launchers ea38082
+- add deb, rpm, and AUR install instructions to readme and site 6663e80
+- improve opencode integration and add docs 4e8cda7
+
+### Bug Fixes
+
+- show single-column line numbers for full-context files #98 @rashpile
+
 ## v0.17.0 - 2026-04-12
 
 ### New Features
