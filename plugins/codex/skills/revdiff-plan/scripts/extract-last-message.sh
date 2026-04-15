@@ -4,9 +4,10 @@
 #
 # usage: extract-last-message.sh [--skip-current] [rollout-file]
 #   --skip-current  best-effort heuristic: use the second most recent rollout file
-#                   by mtime instead of the newest. assumes the newest file belongs
-#                   to the active session. may select the wrong file if concurrent
-#                   codex sessions exist. use an explicit path argument for precision.
+#                   by mtime instead of the newest, scoped to sessions whose cwd
+#                   matches the current directory. assumes the newest matching
+#                   file belongs to the active session. use an explicit path
+#                   argument for precision.
 #   rollout-file    explicit path to a rollout JSONL file (overrides auto-detection)
 # output: raw markdown text of the last assistant response (exits 1 with error to stderr if none found)
 
@@ -40,13 +41,38 @@ else
         exit 1
     fi
 
-    # find rollout files by modification time.
+    canonical_cwd() {
+        local cwd="$1"
+        if [ -d "$cwd" ]; then
+            (cd "$cwd" 2>/dev/null && pwd -P) || printf '%s\n' "$cwd"
+        else
+            printf '%s\n' "$cwd"
+        fi
+    }
+
+    TARGET_CWD=$(canonical_cwd "$(pwd)")
+
+    session_matches_cwd() {
+        local file="$1"
+        local session_cwd
+        session_cwd=$(jq -r '
+            select(.type == "session_meta" or .type == "turn_context")
+            | .payload.cwd // empty
+        ' "$file" 2>/dev/null | head -n 1 || true)
+        session_cwd=$(canonical_cwd "$session_cwd")
+        [ "$session_cwd" = "$TARGET_CWD" ]
+    }
+
+    # find rollout files for this working directory by modification time.
     # track both newest and second-newest for --skip-current support.
     # paths mix flat and hierarchical layouts, so lexicographic sort is unreliable.
     # use -nt (newer than) comparison to avoid macOS xargs running ls with no args when find is empty.
     NEWEST=""
     SECOND=""
     while IFS= read -r -d '' f; do
+        if ! session_matches_cwd "$f"; then
+            continue
+        fi
         if [ -z "$NEWEST" ] || [ "$f" -nt "$NEWEST" ]; then
             SECOND="$NEWEST"
             NEWEST="$f"
@@ -56,7 +82,7 @@ else
     done < <(find "$SESSIONS_DIR" -name '*rollout*.jsonl' -type f -print0 2>/dev/null)
 
     if [ -z "$NEWEST" ]; then
-        echo "error: no rollout files found in $SESSIONS_DIR" >&2
+        echo "error: no rollout files found in $SESSIONS_DIR for cwd: $TARGET_CWD" >&2
         exit 1
     fi
 

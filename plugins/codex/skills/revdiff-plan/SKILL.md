@@ -75,9 +75,9 @@ $SCRIPT_DIR/extract-last-message.sh --skip-current
 ```
 
 The script:
-- Uses a best-effort heuristic: picks the second most recent rollout JSONL file by modification time from `~/.codex/sessions/`
-- This assumes the newest file belongs to the active session; if concurrent Codex sessions exist, the wrong file may be selected
-- Falls back to the newest file if only one session exists
+- Uses a best-effort heuristic scoped to the current working directory: considers only rollout JSONL files from `~/.codex/sessions/` whose `session_meta.payload.cwd` matches `pwd -P`
+- With `--skip-current`, picks the second most recent matching rollout by modification time; this assumes the newest matching file belongs to the active session
+- Falls back to the newest matching file if only one session exists for the current directory
 - Extracts the last assistant message text using jq
 - Outputs raw markdown to stdout
 - Accepts an explicit rollout file path as an argument to bypass auto-detection when precision matters
