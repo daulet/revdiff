@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.19.0 - 2026-04-16
+
+### New Features
+
+- Ctrl+E editor handoff for multi-line annotations #115 @umputun
+- raise annotation char limit to 8000 6395e6d
+- Add Jujutsu (jj) support #112 @nvahalik
+
+### Improvements
+
+- fix stale godoc comments in jj diff and directory readers fc5a15d
+- replace manual ExternalEditor fake with moq-generated mock 25b3c16
+
 ## v0.18.1 - 2026-04-16
 
 ### Improvements
