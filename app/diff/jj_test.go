@@ -10,44 +10,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// setupJjRepo creates a temp dir, writes a minimal jj user config there and
+// exports JJ_CONFIG so every jj invocation (test setup + production methods under
+// test) sees the same deterministic identity without depending on the host jj config.
+// It then initializes a colocated jj/git repo and returns the repo path.
+// Cannot be used with t.Parallel() because it relies on t.Setenv.
 func setupJjRepo(t *testing.T) string {
 	t.Helper()
 	if _, err := exec.LookPath("jj"); err != nil {
 		t.Skip("jj not available")
 	}
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	const body = "[user]\nname = \"Test User\"\nemail = \"test@test.com\"\n"
+	require.NoError(t, os.WriteFile(cfg, []byte(body), 0o600))
+	t.Setenv("JJ_CONFIG", cfg)
 	dir := t.TempDir()
 	jjCmd(t, dir, "git", "init", "--quiet")
-	// user config for commits (stored in per-repo config path after recent jj versions)
-	// we pass --config inline instead, which avoids the config migration warning
 	return dir
 }
 
 func jjCmd(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	full := make([]string, 0, 2+len(args))
-	full = append(full,
-		"--config=user.name=Test User",
-		"--config=user.email=test@test.com",
-	)
-	full = append(full, args...)
-	cmd := exec.Command("jj", full...) //nolint:gosec // args constructed internally
+	cmd := exec.Command("jj", args...) //nolint:gosec // args constructed internally
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "jj %v failed: %s", args, string(out))
 }
 
-// newJjForTest returns a Jj renderer with test-only config overrides so commits
-// get a deterministic author and don't depend on the host jj config.
-func newJjForTest(dir string) *Jj {
-	j := NewJj(dir)
-	j.extraArgs = []string{
-		"--config=user.name=Test User",
-		"--config=user.email=test@test.com",
-	}
-	return j
-}
-
-func TestTranslateJjRef(t *testing.T) {
+func TestJj_TranslateRef(t *testing.T) {
+	j := &Jj{}
 	tests := []struct {
 		name string
 		ref  string
@@ -68,7 +59,7 @@ func TestTranslateJjRef(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, translateJjRef(tt.ref))
+			assert.Equal(t, tt.want, j.translateRef(tt.ref))
 		})
 	}
 }
@@ -139,6 +130,34 @@ func TestJj_ParseStatus(t *testing.T) {
 	}
 }
 
+func TestJj_ExpandRename(t *testing.T) {
+	j := &Jj{}
+	tests := []struct {
+		name    string
+		target  string
+		oldPath string
+		newPath string
+		ok      bool
+	}{
+		{name: "brace plain", target: "{old.txt => new.txt}", oldPath: "old.txt", newPath: "new.txt", ok: true},
+		{name: "brace with prefix and suffix", target: "dir/{old => new}/file.txt", oldPath: "dir/old/file.txt", newPath: "dir/new/file.txt", ok: true},
+		{name: "brace with prefix only", target: "dir/{a.txt => b.txt}", oldPath: "dir/a.txt", newPath: "dir/b.txt", ok: true},
+		{name: "fallback arrow separator", target: "old.txt => new.txt", oldPath: "old.txt", newPath: "new.txt", ok: true},
+		{name: "no separator returns false", target: "just a path", ok: false},
+		{name: "empty returns false", target: "", ok: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldPath, newPath, ok := j.expandRename(tt.target)
+			assert.Equal(t, tt.ok, ok)
+			if tt.ok {
+				assert.Equal(t, tt.oldPath, oldPath)
+				assert.Equal(t, tt.newPath, newPath)
+			}
+		})
+	}
+}
+
 func TestJj_SynthesizeBinaryDiff(t *testing.T) {
 	// when jj emits raw bytes for a binary file, swap the hunk with the
 	// git-style "Binary files ... differ" marker so parseUnifiedDiff picks it up.
@@ -150,7 +169,8 @@ func TestJj_SynthesizeBinaryDiff(t *testing.T) {
 		"@@ -0,0 +1,1 @@\n" +
 		"+\x00\x01\x02binary\n"
 
-	got := jjSynthesizeBinaryDiff(raw)
+	j := &Jj{}
+	got := j.synthesizeBinaryDiff(raw)
 	assert.Contains(t, got, "Binary files /dev/null and b/bin.dat differ")
 	assert.NotContains(t, got, "\x00", "null bytes should be stripped")
 	assert.NotContains(t, got, "+\x01\x02binary", "binary hunk body should be removed")
@@ -163,14 +183,15 @@ func TestJj_SynthesizeBinaryDiff_NoBinary(t *testing.T) {
 		"@@ -1,1 +1,1 @@\n" +
 		"-old\n" +
 		"+new\n"
-	assert.Equal(t, raw, jjSynthesizeBinaryDiff(raw), "non-binary diff should be returned unchanged")
+	j := &Jj{}
+	assert.Equal(t, raw, j.synthesizeBinaryDiff(raw), "non-binary diff should be returned unchanged")
 }
 
 // e2e tests below
 
 func TestJj_ChangedFiles_Uncommitted(t *testing.T) {
 	dir := setupJjRepo(t)
-	j := newJjForTest(dir)
+	j := NewJj(dir)
 
 	writeFile(t, dir, "hello.txt", "hello\n")
 	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
@@ -186,7 +207,7 @@ func TestJj_ChangedFiles_Uncommitted(t *testing.T) {
 
 func TestJj_ChangedFiles_Added(t *testing.T) {
 	dir := setupJjRepo(t)
-	j := newJjForTest(dir)
+	j := NewJj(dir)
 
 	writeFile(t, dir, "hello.txt", "hello\n")
 	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
@@ -202,7 +223,7 @@ func TestJj_ChangedFiles_Added(t *testing.T) {
 
 func TestJj_ChangedFiles_NoChanges(t *testing.T) {
 	dir := setupJjRepo(t)
-	j := newJjForTest(dir)
+	j := NewJj(dir)
 
 	writeFile(t, dir, "hello.txt", "hello\n")
 	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
@@ -215,7 +236,7 @@ func TestJj_ChangedFiles_NoChanges(t *testing.T) {
 
 func TestJj_ChangedFiles_Deleted(t *testing.T) {
 	dir := setupJjRepo(t)
-	j := newJjForTest(dir)
+	j := NewJj(dir)
 
 	writeFile(t, dir, "hello.txt", "hello\n")
 	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
@@ -231,7 +252,7 @@ func TestJj_ChangedFiles_Deleted(t *testing.T) {
 
 func TestJj_FileDiff_Uncommitted(t *testing.T) {
 	dir := setupJjRepo(t)
-	j := newJjForTest(dir)
+	j := NewJj(dir)
 
 	writeFile(t, dir, "hello.txt", "line one\nline two\n")
 	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
@@ -260,7 +281,7 @@ func TestJj_FileDiff_Uncommitted(t *testing.T) {
 
 func TestJj_FileDiff_NewFile(t *testing.T) {
 	dir := setupJjRepo(t)
-	j := newJjForTest(dir)
+	j := NewJj(dir)
 
 	writeFile(t, dir, "hello.txt", "line one\n")
 	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
@@ -281,7 +302,7 @@ func TestJj_FileDiff_NewFile(t *testing.T) {
 
 func TestJj_FileDiff_Binary(t *testing.T) {
 	dir := setupJjRepo(t)
-	j := newJjForTest(dir)
+	j := NewJj(dir)
 
 	writeFile(t, dir, "placeholder.txt", "x\n")
 	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
@@ -325,7 +346,7 @@ func TestJj_DirectoryReader_FileDiff(t *testing.T) {
 
 func TestJj_UntrackedFiles(t *testing.T) {
 	dir := setupJjRepo(t)
-	j := newJjForTest(dir)
+	j := NewJj(dir)
 
 	// jj auto-tracks everything in the working copy, so there are no "untracked" files
 	// in the git sense. We expect UntrackedFiles to always return an empty result.

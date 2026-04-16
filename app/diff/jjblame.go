@@ -40,16 +40,16 @@ func (j *Jj) blameTargetRef(ref string) string {
 		if left == "" || right == "" {
 			return ""
 		}
-		return translateJjRef(right)
+		return j.translateRef(right)
 	}
 	if left, right, ok := strings.Cut(ref, ".."); ok {
 		if left == "" || right == "" {
 			return ""
 		}
-		return translateJjRef(right)
+		return j.translateRef(right)
 	}
 	if ref != "" {
-		return translateJjRef(ref)
+		return j.translateRef(ref)
 	}
 	return ""
 }

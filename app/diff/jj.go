@@ -20,8 +20,7 @@ const jjFullContext = "--context=1000000"
 // HEAD and friends are translated to jj revsets (@-, @--, …). Jujutsu auto-tracks
 // every file in the working copy, so UntrackedFiles always returns an empty list.
 type Jj struct {
-	workDir   string   // working directory for jj commands
-	extraArgs []string // leading args prepended to every jj invocation (e.g. --config overrides for tests)
+	workDir string // working directory for jj commands
 }
 
 // NewJj creates a new Jj diff renderer rooted at the given working directory.
@@ -47,9 +46,9 @@ var jjRenameRe = regexp.MustCompile(`^R (.+)$`)
 // surrounded by a static path prefix and suffix.
 var jjRenameBraceRe = regexp.MustCompile(`^(.*)\{(.+) => (.+)\}(.*)$`)
 
-// jjStatusToFileStatus maps a jj summary status letter to a FileStatus.
+// statusToFileStatus maps a jj summary status letter to a FileStatus.
 // Renames ("R") are caller-handled — they expand to two entries.
-func (j *Jj) jjStatusToFileStatus(status string) FileStatus {
+func (j *Jj) statusToFileStatus(status string) FileStatus {
 	switch FileStatus(status) {
 	case FileModified:
 		return FileModified
@@ -90,7 +89,7 @@ func (j *Jj) parseSummary(out string) []FileEntry {
 		}
 		// rename?
 		if m := jjRenameRe.FindStringSubmatch(line); m != nil && strings.HasPrefix(line, "R ") {
-			if oldPath, newPath, ok := expandJjRename(m[1]); ok {
+			if oldPath, newPath, ok := j.expandRename(m[1]); ok {
 				entries = append(entries,
 					FileEntry{Path: oldPath, Status: FileDeleted},
 					FileEntry{Path: newPath, Status: FileAdded},
@@ -103,7 +102,7 @@ func (j *Jj) parseSummary(out string) []FileEntry {
 			continue
 		}
 		status, path := m[1], m[2]
-		fs := j.jjStatusToFileStatus(status)
+		fs := j.statusToFileStatus(status)
 		if fs == "" {
 			continue
 		}
@@ -112,9 +111,9 @@ func (j *Jj) parseSummary(out string) []FileEntry {
 	return entries
 }
 
-// expandJjRename decodes a jj rename summary target like "prefix/{old => new}/suffix"
+// expandRename decodes a jj rename summary target like "prefix/{old => new}/suffix"
 // into the full old and new paths. Returns false when the target is not a brace form.
-func expandJjRename(target string) (oldPath, newPath string, ok bool) {
+func (j *Jj) expandRename(target string) (oldPath, newPath string, ok bool) {
 	m := jjRenameBraceRe.FindStringSubmatch(target)
 	if m == nil {
 		// no braces — jj printed "R old new" or similar; fall back to splitting on " => "
@@ -143,7 +142,7 @@ func (j *Jj) FileDiff(ref, file string, _ bool) ([]DiffLine, error) {
 
 	// jj emits raw bytes for binary files instead of git's "Binary files … differ"
 	// marker. Detect and rewrite so parseUnifiedDiff produces the binary placeholder.
-	normalized := jjSynthesizeBinaryDiff(out)
+	normalized := j.synthesizeBinaryDiff(out)
 	return parseUnifiedDiff(normalized)
 }
 
@@ -156,8 +155,8 @@ func (j *Jj) diffRangeFlags(ref string) []string {
 
 	// triple-dot first so "A...B" isn't mis-split on ".."
 	if left, right, ok := strings.Cut(ref, "..."); ok {
-		l := translateJjRef(left)
-		r := translateJjRef(right)
+		l := j.translateRef(left)
+		r := j.translateRef(right)
 		if r == "" {
 			r = "@"
 		}
@@ -170,8 +169,8 @@ func (j *Jj) diffRangeFlags(ref string) []string {
 	}
 
 	if left, right, ok := strings.Cut(ref, ".."); ok {
-		l := translateJjRef(left)
-		r := translateJjRef(right)
+		l := j.translateRef(left)
+		r := j.translateRef(right)
 		if l == "" {
 			l = "root()"
 		}
@@ -181,10 +180,10 @@ func (j *Jj) diffRangeFlags(ref string) []string {
 		return []string{"--from", l, "--to", r}
 	}
 
-	return []string{"--from", translateJjRef(ref), "--to", "@"}
+	return []string{"--from", j.translateRef(ref), "--to", "@"}
 }
 
-// translateJjRef converts git-style refs to jj revset syntax.
+// translateRef converts git-style refs to jj revset syntax.
 //   - HEAD       → @-         (parent of working copy; jj's "last committed" equivalent)
 //   - HEAD~N     → @ followed by (N+1) dashes
 //   - HEAD^      → @-- (same as HEAD~1)
@@ -192,7 +191,7 @@ func (j *Jj) diffRangeFlags(ref string) []string {
 //   - HEAD^N>1   → parents(@-) (Nth-parent for merges; we can't target a specific parent cleanly)
 //
 // Anything else (bookmarks, change/commit IDs, the bare "@" / "@-" forms) passes through unchanged.
-func translateJjRef(ref string) string {
+func (j *Jj) translateRef(ref string) string {
 	switch {
 	case ref == "":
 		return ""
@@ -200,7 +199,7 @@ func translateJjRef(ref string) string {
 		return "@-"
 	case strings.HasPrefix(ref, "HEAD~"):
 		n := ref[5:]
-		count, ok := parseSmallPositive(n)
+		count, ok := j.parseSmallPositive(n)
 		if !ok {
 			return ref
 		}
@@ -219,7 +218,7 @@ func translateJjRef(ref string) string {
 
 // parseSmallPositive parses a non-negative decimal integer. Returns false on
 // failure. Used for HEAD~N parsing where N is a small positive integer.
-func parseSmallPositive(s string) (int, bool) {
+func (j *Jj) parseSmallPositive(s string) (int, bool) {
 	if s == "" {
 		return 0, false
 	}
@@ -236,11 +235,11 @@ func parseSmallPositive(s string) (int, bool) {
 	return n, true
 }
 
-// jjSynthesizeBinaryDiff replaces the hunk body of a jj diff with a git-style
+// synthesizeBinaryDiff replaces the hunk body of a jj diff with a git-style
 // "Binary files … differ" marker when the hunk contains NUL bytes. parseUnifiedDiff
 // already recognizes the marker and returns a binary placeholder DiffLine.
 // Returns the input unchanged when no NUL bytes are present in the hunk body.
-func jjSynthesizeBinaryDiff(raw string) string {
+func (j *Jj) synthesizeBinaryDiff(raw string) string {
 	if !bytes.ContainsRune([]byte(raw), 0) {
 		return raw
 	}
@@ -266,10 +265,6 @@ func jjSynthesizeBinaryDiff(raw string) string {
 }
 
 // runJj executes a jj command in the working directory and returns its output.
-// Prepends extraArgs (e.g. --no-pager) then delegates to the shared runVCS helper.
 func (j *Jj) runJj(args ...string) (string, error) {
-	full := make([]string, 0, len(j.extraArgs)+len(args))
-	full = append(full, j.extraArgs...)
-	full = append(full, args...)
-	return runVCS(j.workDir, "jj", full...)
+	return runVCS(j.workDir, "jj", args...)
 }

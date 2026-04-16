@@ -74,7 +74,7 @@ Handles all interaction with version control systems and diff parsing.
 **Renderer implementations** — all implement the `ui.Renderer` interface (`ChangedFiles()` + `FileDiff()`):
 - `Git` — runs `git diff`, parses unified diff output
 - `Hg` — runs `hg diff --git`, parses unified diff output
-- `Jj` — runs `jj diff --git`, parses unified diff output; git-style refs (HEAD, HEAD~N, A..B) translate to jj revsets via `--from`/`--to`. jj emits raw bytes for binary files, so `jjSynthesizeBinaryDiff` rewrites such diffs with the git-style "Binary files … differ" marker so `parseUnifiedDiff` produces a binary placeholder.
+- `Jj` — runs `jj diff --git`, parses unified diff output; git-style refs (HEAD, HEAD~N, A..B) translate to jj revsets via `--from`/`--to`. jj emits raw bytes for binary files, so `(*Jj).synthesizeBinaryDiff` rewrites such diffs with the git-style "Binary files … differ" marker so `parseUnifiedDiff` produces a binary placeholder.
 - `FileReader` — reads standalone files as full-context (no VCS needed)
 - `DirectoryReader` — lists all tracked files via a pluggable lister (`git ls-files` by default; `NewJjDirectoryReader` uses `jj file list`) for `--all-files` mode
 - `StdinReader` — reads from stdin as scratch buffer

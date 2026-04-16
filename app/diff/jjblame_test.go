@@ -1,7 +1,6 @@
 package diff
 
 import (
-	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -97,12 +96,8 @@ func TestJj_BlameTargetRef(t *testing.T) {
 }
 
 func TestJj_FileBlame_Integration(t *testing.T) {
-	if _, err := exec.LookPath("jj"); err != nil {
-		t.Skip("jj not available")
-	}
-
 	dir := setupJjRepo(t)
-	j := newJjForTest(dir)
+	j := NewJj(dir)
 
 	writeFile(t, dir, "hello.txt", "line one\n")
 	jjCmd(t, dir, "describe", "-m", "first", "--quiet")
