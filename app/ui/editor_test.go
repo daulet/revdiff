@@ -16,35 +16,23 @@ import (
 	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
-// fakeExternalEditor captures the content passed to Command and returns a
-// configurable Cmd, complete function, and error. Used to drive openEditor
-// tests without spawning a real editor.
-type fakeExternalEditor struct {
-	seenContent    string
-	commandCallCnt int
-	cmd            *exec.Cmd
-	content        string
-	completeErr    error
-	commandErr     error
-}
-
-func (f *fakeExternalEditor) Command(content string) (*exec.Cmd, func(error) (string, error), error) {
-	f.seenContent = content
-	f.commandCallCnt++
-	if f.commandErr != nil {
-		return nil, nil, f.commandErr
+// mockEditor returns a configured ExternalEditorMock whose Command returns a
+// no-op exec.Cmd and a complete func that reports the given content. cmdErr
+// short-circuits Command (returns nil cmd + cmdErr); the complete closure
+// preserves any runErr the caller passes.
+func mockEditor(content string, cmdErr error) *mocks.ExternalEditorMock {
+	return &mocks.ExternalEditorMock{
+		CommandFunc: func(string) (*exec.Cmd, func(error) (string, error), error) {
+			if cmdErr != nil {
+				return nil, nil, cmdErr
+			}
+			cmd := exec.Command("/bin/true")
+			complete := func(runErr error) (string, error) {
+				return content, runErr
+			}
+			return cmd, complete, nil
+		},
 	}
-	cmd := f.cmd
-	if cmd == nil {
-		cmd = exec.Command("/bin/true")
-	}
-	complete := func(runErr error) (string, error) {
-		if runErr != nil {
-			return f.content, runErr
-		}
-		return f.content, f.completeErr
-	}
-	return cmd, complete, nil
 }
 
 func TestOpenEditor_LineLevelCapturesTargetAndSeedsContent(t *testing.T) {
@@ -59,7 +47,7 @@ func TestOpenEditor_LineLevelCapturesTargetAndSeedsContent(t *testing.T) {
 	m.file.lines = lines
 	m.nav.diffCursor = 1
 
-	fake := &fakeExternalEditor{}
+	fake := mockEditor("", nil)
 	m.editor = fake
 
 	m.startAnnotation()
@@ -67,8 +55,8 @@ func TestOpenEditor_LineLevelCapturesTargetAndSeedsContent(t *testing.T) {
 
 	cmd := m.openEditor()
 	require.NotNil(t, cmd, "openEditor should return a non-nil tea.Cmd")
-	assert.Equal(t, 1, fake.commandCallCnt)
-	assert.Equal(t, "pre-edit content", fake.seenContent, "editor should receive the current input value")
+	require.Len(t, fake.CommandCalls(), 1)
+	assert.Equal(t, "pre-edit content", fake.CommandCalls()[0].Content, "editor should receive the current input value")
 }
 
 func TestOpenEditor_FileLevelCapturesTarget(t *testing.T) {
@@ -77,7 +65,7 @@ func TestOpenEditor_FileLevelCapturesTarget(t *testing.T) {
 	m.layout.focus = paneDiff
 	m.file.name = "a.go"
 
-	fake := &fakeExternalEditor{}
+	fake := mockEditor("", nil)
 	m.editor = fake
 
 	cmd := m.startFileAnnotation()
@@ -86,8 +74,8 @@ func TestOpenEditor_FileLevelCapturesTarget(t *testing.T) {
 
 	editorCmd := m.openEditor()
 	require.NotNil(t, editorCmd)
-	assert.Equal(t, 1, fake.commandCallCnt, "editor.Command must be invoked exactly once on file-level path")
-	assert.Equal(t, "file-level seed", fake.seenContent, "editor must receive the current input value")
+	require.Len(t, fake.CommandCalls(), 1, "editor.Command must be invoked exactly once on file-level path")
+	assert.Equal(t, "file-level seed", fake.CommandCalls()[0].Content, "editor must receive the current input value")
 }
 
 func TestOpenEditor_LineLevelReturnsNilWhenNoCursorLine(t *testing.T) {
@@ -97,39 +85,31 @@ func TestOpenEditor_LineLevelReturnsNilWhenNoCursorLine(t *testing.T) {
 	m.file.name = "a.go"
 	// no lines loaded and diffCursor default 0 -> cursorDiffLine returns false
 
-	fake := &fakeExternalEditor{}
+	fake := mockEditor("", nil)
 	m.editor = fake
 	m.annot.annotating = true
 	m.annot.fileAnnotating = false
 
 	assert.Nil(t, m.openEditor(), "line-level openEditor must return nil when cursor has no diff line")
-	assert.Zero(t, fake.commandCallCnt, "editor.Command must NOT be invoked when no cursor line exists")
+	assert.Empty(t, fake.CommandCalls(), "editor.Command must NOT be invoked when no cursor line exists")
 	assert.True(t, m.annot.annotating, "annotating must remain true so the user can Esc out normally")
 	assert.False(t, m.annot.fileAnnotating, "fileAnnotating state must not be flipped by this no-op path")
 }
 
-// nilFakeEditor is a pointer type used to construct a typed-nil interface
-// value. Its Command method is never actually invoked if the nil-guard works.
-type nilFakeEditor struct{}
-
-func (*nilFakeEditor) Command(string) (*exec.Cmd, func(error) (string, error), error) {
-	panic("Command should never be called on typed-nil — nil-guard in NewModel should replace it")
-}
-
 func TestIsNilValue(t *testing.T) {
-	var typedNil *nilFakeEditor
+	var typedNil *mocks.ExternalEditorMock
 	var untypedNil ExternalEditor
 	assert.True(t, isNilValue(typedNil), "typed-nil pointer must be detected")
 	assert.False(t, isNilValue(untypedNil), "untyped-nil interface is handled by the != nil check, not isNilValue")
 	assert.False(t, isNilValue(42), "non-pointer value is not nil")
-	assert.False(t, isNilValue(&nilFakeEditor{}), "non-nil pointer is not nil")
+	assert.False(t, isNilValue(&mocks.ExternalEditorMock{}), "non-nil pointer is not nil")
 }
 
 func TestNewModel_TypedNilEditorDefaultsToConcrete(t *testing.T) {
-	// passing (*nilFakeEditor)(nil) as Editor would normally bypass a plain
-	// `cfg.Editor == nil` check and panic on later use. Verify the isNilValue
-	// guard in NewModel replaces it with the default editor.Editor{}.
-	var typedNil *nilFakeEditor
+	// passing (*mocks.ExternalEditorMock)(nil) as Editor would normally bypass a
+	// plain `cfg.Editor == nil` check and panic on later use. Verify the
+	// isNilValue guard in NewModel replaces it with the default editor.Editor{}.
+	var typedNil *mocks.ExternalEditorMock
 	res := style.PlainResolver()
 	m, err := NewModel(ModelConfig{
 		Renderer:       &mocks.RendererMock{},
@@ -166,7 +146,7 @@ func TestOpenEditor_CommandErrorProducesEditorFinishedMsg(t *testing.T) {
 	m.nav.diffCursor = 0
 
 	cmdErr := errors.New("temp file unavailable")
-	m.editor = &fakeExternalEditor{commandErr: cmdErr}
+	m.editor = mockEditor("", cmdErr)
 	m.startAnnotation()
 	m.annot.input.SetValue("in-progress note")
 

@@ -1820,7 +1820,7 @@ func TestModel_AnnotateCtrlEOpensEditor(t *testing.T) {
 	m.file.lines = lines
 	m.nav.diffCursor = 1
 
-	fake := &fakeExternalEditor{content: "edited result"}
+	fake := mockEditor("edited result", nil)
 	m.editor = fake
 
 	m.startAnnotation()
@@ -1829,8 +1829,8 @@ func TestModel_AnnotateCtrlEOpensEditor(t *testing.T) {
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
 	model := result.(Model)
 	require.NotNil(t, cmd, "Ctrl+E should return a tea.Cmd for ExecProcess")
-	assert.Equal(t, 1, fake.commandCallCnt, "editor.Command should be called once")
-	assert.Equal(t, "seeded text", fake.seenContent, "editor must receive current input value")
+	require.Len(t, fake.CommandCalls(), 1, "editor.Command should be called once")
+	assert.Equal(t, "seeded text", fake.CommandCalls()[0].Content, "editor must receive current input value")
 	assert.True(t, model.annot.annotating, "annotation mode should remain active so editorFinishedMsg routes back correctly")
 
 	// tea.ExecProcess wraps the cmd so that when invoked outside the runtime the
@@ -1848,7 +1848,7 @@ func TestModel_AnnotateCtrlEOpensEditorFileLevel(t *testing.T) {
 	m.layout.focus = paneDiff
 	m.file.name = "a.go"
 
-	fake := &fakeExternalEditor{content: "edited file note"}
+	fake := mockEditor("edited file note", nil)
 	m.editor = fake
 
 	m.startFileAnnotation()
@@ -1857,8 +1857,8 @@ func TestModel_AnnotateCtrlEOpensEditorFileLevel(t *testing.T) {
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
 	model := result.(Model)
 	require.NotNil(t, cmd, "Ctrl+E should return a tea.Cmd for ExecProcess on file-level path")
-	assert.Equal(t, 1, fake.commandCallCnt, "editor.Command should be called once on file-level path")
-	assert.Equal(t, "file seed", fake.seenContent, "editor must receive current file-level input value")
+	require.Len(t, fake.CommandCalls(), 1, "editor.Command should be called once on file-level path")
+	assert.Equal(t, "file seed", fake.CommandCalls()[0].Content, "editor must receive current file-level input value")
 	assert.True(t, model.annot.annotating, "annotation mode should remain active so editorFinishedMsg routes back correctly")
 	assert.True(t, model.annot.fileAnnotating, "fileAnnotating must remain true so editor result targets file-level save")
 }
@@ -1954,7 +1954,7 @@ func TestModel_EditorFinishedRetryAfterErrorReSeedsWithPreservedInput(t *testing
 	m.file.lines = lines
 	m.nav.diffCursor = 0
 
-	fake := &fakeExternalEditor{}
+	fake := mockEditor("", nil)
 	m.editor = fake
 
 	m.startAnnotation()
@@ -1964,8 +1964,8 @@ func TestModel_EditorFinishedRetryAfterErrorReSeedsWithPreservedInput(t *testing
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
 	model := result.(Model)
 	require.NotNil(t, cmd)
-	assert.Equal(t, 1, fake.commandCallCnt)
-	assert.Equal(t, "retry content", fake.seenContent)
+	require.Len(t, fake.CommandCalls(), 1)
+	assert.Equal(t, "retry content", fake.CommandCalls()[0].Content)
 
 	// simulate editor failure
 	errMsg := editorFinishedMsg{err: errors.New("failed"), fileName: "a.go", fileLevel: false, line: 1, changeType: "+"}
@@ -1978,8 +1978,8 @@ func TestModel_EditorFinishedRetryAfterErrorReSeedsWithPreservedInput(t *testing
 	result, cmd2 := model.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
 	model = result.(Model)
 	require.NotNil(t, cmd2)
-	assert.Equal(t, 2, fake.commandCallCnt, "editor must be invoked again on retry")
-	assert.Equal(t, "retry content", fake.seenContent, "retry must re-seed with preserved input content")
+	require.Len(t, fake.CommandCalls(), 2, "editor must be invoked again on retry")
+	assert.Equal(t, "retry content", fake.CommandCalls()[1].Content, "retry must re-seed with preserved input content")
 	assert.True(t, model.annot.annotating)
 }
 
@@ -2132,7 +2132,7 @@ func TestModel_ReAnnotateMultiLineCtrlESeedsFromStash(t *testing.T) {
 	m.nav.diffCursor = 0
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "top\nmiddle\nbottom"})
 
-	fake := &fakeExternalEditor{}
+	fake := mockEditor("", nil)
 	m.editor = fake
 
 	m.startAnnotation()
@@ -2142,8 +2142,8 @@ func TestModel_ReAnnotateMultiLineCtrlESeedsFromStash(t *testing.T) {
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
 	model := result.(Model)
 	require.NotNil(t, cmd)
-	assert.Equal(t, 1, fake.commandCallCnt)
-	assert.Equal(t, "top\nmiddle\nbottom", fake.seenContent, "editor must be seeded from existingMultiline when input is empty")
+	require.Len(t, fake.CommandCalls(), 1)
+	assert.Equal(t, "top\nmiddle\nbottom", fake.CommandCalls()[0].Content, "editor must be seeded from existingMultiline when input is empty")
 	assert.True(t, model.annot.annotating, "annotation mode remains open while editor runs")
 	assert.Equal(t, "top\nmiddle\nbottom", model.annot.existingMultiline, "stash preserved across Ctrl+E")
 }
@@ -2206,12 +2206,13 @@ func TestModel_ReAnnotateFileLevelMultiLineStashedNotFlattened(t *testing.T) {
 	assert.Empty(t, m.annot.input.Value(), "file-level input empty when existing is multi-line")
 	assert.Equal(t, "file\nnote\nspans", m.annot.existingMultiline, "file-level stash holds full content")
 
-	fake := &fakeExternalEditor{}
+	fake := mockEditor("", nil)
 	m.editor = fake
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
 	model := result.(Model)
 	require.NotNil(t, cmd)
-	assert.Equal(t, "file\nnote\nspans", fake.seenContent, "file-level Ctrl+E seeds from stash")
+	require.Len(t, fake.CommandCalls(), 1)
+	assert.Equal(t, "file\nnote\nspans", fake.CommandCalls()[0].Content, "file-level Ctrl+E seeds from stash")
 
 	// Esc must clear the stash so it doesn't leak to a later annotation on a different line
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})

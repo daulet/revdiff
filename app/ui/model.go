@@ -7,6 +7,7 @@ package ui
 //go:generate moq -out mocks/style_renderer.go -pkg mocks -skip-ensure -fmt goimports . styleRenderer
 //go:generate moq -out mocks/sgr_processor.go -pkg mocks -skip-ensure -fmt goimports . sgrProcessor
 //go:generate moq -out mocks/word_differ.go -pkg mocks -skip-ensure -fmt goimports . wordDiffer
+//go:generate moq -out mocks/external_editor.go -pkg mocks -skip-ensure -fmt goimports . ExternalEditor
 
 // note: ThemeCatalog is not moq-generated because ThemeEntry/ThemeSpec are defined in this package,
 // creating an import cycle (ui -> mocks -> ui). Tests use manual fakes instead.
