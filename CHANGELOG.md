@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.19.1 - 2026-04-16
+
+### Improvements
+
+- add basic bundled theme 926c1b3
+- add hg + jj support to skill helper scripts #116 @paskal
+- convert jj helpers to methods and drop test-only hook 5c2bfd4
+
 ## v0.19.0 - 2026-04-16
 
 ### New Features
