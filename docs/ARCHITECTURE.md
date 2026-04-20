@@ -152,7 +152,7 @@ Layered popup system with mutual exclusivity (one overlay at a time).
 - **`helpOverlay`** — two-column keybinding help popup
 - **`annotListOverlay`** — scrollable annotation list with cross-file jump
 - **`themeSelectOverlay`** — theme picker with fzf-style filter, live swatch preview
-- **`commitInfoOverlay`** (`commitinfo.go`) — scrollable read-only pager showing subject + body of every commit in the current ref range. Populated lazily on first `i` press (cached for the session). Sized via `clamp(term_w * 0.9, 30, 90)` × `term_h - 4`, wraps body text at word boundaries using `ansi.Wrap` from `charmbracelet/x/ansi` (ANSI-aware, preserves inline escapes). Renders "no commits in range" / error-italic / "no commits in this mode" placeholders for edge cases.
+- **`commitInfoOverlay`** (`commitinfo.go`) — scrollable read-only pager showing subject + body of every commit in the current ref range. Populated eagerly at startup via `loadCommits()` in parallel with `loadFiles()` under `tea.Batch`; re-fetched on `R` reload. `handleCommitInfo` only reads cached state — a transient "loading commits…" hint fires if the user presses `i` before the fetch lands. Sized via `clamp(term_w * 0.9, 30, 90)` × `term_h - 4`, wraps body text at word boundaries using `ansi.Wrap` from `charmbracelet/x/ansi` (ANSI-aware, preserves inline escapes). Renders "no commits in range" / error-italic / "no commits in this mode" placeholders for edge cases.
 
 `Manager.HandleKey()` returns an `Outcome` — Model switches on `OutcomeKind` to perform side effects (file jumps, theme apply/persist). This keeps overlay package free of Model dependencies.
 
@@ -319,10 +319,15 @@ User presses 'a' on diff line
 ```
 User presses '?' / '@' / 'T' / 'i'
   → Model calls overlay.OpenHelp/OpenAnnotList/OpenThemeSelect/OpenCommitInfo
-      (for 'i': Model first runs ensureCommitsLoaded() which calls
-       commitLogSource.CommitLog(ref) once per session; cached thereafter.
-       When not applicable — stdin/staged/only/all-files/no-ref — Model
-       sets a transient status-bar hint and skips the open entirely.)
+      (for 'i': commits are fetched eagerly at startup via loadCommits()
+       running in parallel with loadFiles() under tea.Batch from Init();
+       triggerReload() re-fires both together. handleCommitsLoaded caches
+       the result under a seq-guard (m.commits.loadSeq) that drops stale
+       messages after a reload. handleCommitInfo only reads cached state —
+       if the fetch has not yet landed, it sets a transient "loading
+       commits…" hint instead of opening the overlay. When not applicable —
+       stdin/staged/only/all-files/no-ref — Model sets a transient
+       status-bar hint and skips the open entirely.)
   → overlay.Manager activates popup, blocks other overlays
   → key events route through Manager.HandleKey() → Outcome
   → Model switches on OutcomeKind:

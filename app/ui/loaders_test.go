@@ -941,15 +941,165 @@ func TestModel_TriggerReload_DropsStaleFileLoadedMsg(t *testing.T) {
 		"stale fileLoadedMsg must be dropped after triggerReload bumps file.loadSeq")
 }
 
-func TestModel_TriggerReload_InvalidatesCommitCache(t *testing.T) {
-	m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{})
-	m.commits.loaded = true
-	m.commits.list = []diff.CommitInfo{{Hash: "sha1"}}
+func TestModel_LoadCommits_ReturnsNilWhenNotApplicable(t *testing.T) {
+	m := testModel(nil, nil)
+	m.commits.source = &fakeCommitLog{}
+	m.commits.applicable = false
 
-	m.triggerReload()
+	cmd := m.loadCommits()
+	assert.Nil(t, cmd, "loadCommits must return nil when not applicable")
+}
+
+func TestModel_LoadCommits_ReturnsNilWhenSourceIsNil(t *testing.T) {
+	m := testModel(nil, nil)
+	m.commits.source = nil
+	m.commits.applicable = true
+
+	cmd := m.loadCommits()
+	assert.Nil(t, cmd, "loadCommits must return nil when source is nil")
+}
+
+func TestModel_LoadCommits_ReturnsCmdWhenApplicable(t *testing.T) {
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+		return []diff.CommitInfo{{Hash: "abc"}, {Hash: "def"}}, nil
+	}}
+	m := testModel(nil, nil)
+	m.commits.source = fake
+	m.commits.applicable = true
+	m.cfg.ref = "HEAD~2"
+	m.commits.loadSeq = 7
+
+	cmd := m.loadCommits()
+	require.NotNil(t, cmd, "loadCommits must return a command when applicable and source is set")
+
+	msg := cmd()
+	cmsg, ok := msg.(commitsLoadedMsg)
+	require.True(t, ok, "command must emit a commitsLoadedMsg")
+	assert.Equal(t, uint64(7), cmsg.seq, "captured seq must be on the message")
+	assert.Len(t, cmsg.list, 2)
+	assert.Equal(t, "abc", cmsg.list[0].Hash)
+	assert.False(t, cmsg.truncated, "under MaxCommits must not be truncated")
+	require.NoError(t, cmsg.err)
+	assert.Equal(t, "HEAD~2", fake.lastRef, "CommitLog must be called with the captured ref")
+}
+
+func TestModel_LoadCommits_PropagatesError(t *testing.T) {
+	boom := errors.New("vcs blew up")
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+		return nil, boom
+	}}
+	m := testModel(nil, nil)
+	m.commits.source = fake
+	m.commits.applicable = true
+	m.cfg.ref = "bad"
+
+	cmd := m.loadCommits()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	cmsg, ok := msg.(commitsLoadedMsg)
+	require.True(t, ok)
+	require.Error(t, cmsg.err)
+	assert.Equal(t, boom, cmsg.err)
+	assert.Empty(t, cmsg.list)
+	assert.False(t, cmsg.truncated)
+}
+
+func TestModel_LoadCommits_TruncatedFlag(t *testing.T) {
+	full := make([]diff.CommitInfo, diff.MaxCommits)
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) { return full, nil }}
+	m := testModel(nil, nil)
+	m.commits.source = fake
+	m.commits.applicable = true
+
+	cmd := m.loadCommits()
+	require.NotNil(t, cmd)
+	cmsg := cmd().(commitsLoadedMsg)
+	assert.True(t, cmsg.truncated, "exactly MaxCommits results must mark truncated")
+}
+
+func TestModel_HandleCommitsLoaded_PopulatesState(t *testing.T) {
+	m := testModel(nil, nil)
+	m.commits.loadSeq = 3
+	m.commits.loaded = false
+	m.commits.list = nil
+	m.commits.err = nil
+	m.commits.truncated = false
+
+	list := []diff.CommitInfo{{Hash: "abc"}, {Hash: "def"}}
+	result, cmd := m.Update(commitsLoadedMsg{seq: 3, list: list, truncated: true})
+	model := result.(Model)
+
+	assert.Nil(t, cmd)
+	assert.True(t, model.commits.loaded, "loaded must flip to true after matching seq")
+	assert.Equal(t, list, model.commits.list)
+	assert.True(t, model.commits.truncated)
+	require.NoError(t, model.commits.err)
+}
+
+func TestModel_HandleCommitsLoaded_DropsStaleResult(t *testing.T) {
+	// regression: a slow commit fetch (seq=0) must not overwrite state after a
+	// newer load (seq=1) was issued — e.g. user pressed R immediately after startup.
+	m := testModel(nil, nil)
+	m.commits.loadSeq = 1 // simulate a newer load already dispatched (e.g. triggerReload)
+	m.commits.loaded = false
+	m.commits.list = nil
+
+	stale := []diff.CommitInfo{{Hash: "stale"}}
+	result, cmd := m.Update(commitsLoadedMsg{seq: 0, list: stale})
+	model := result.(Model)
+
+	assert.Nil(t, cmd)
+	assert.False(t, model.commits.loaded, "stale result must not flip loaded")
+	assert.Nil(t, model.commits.list, "stale result must not populate list")
+}
+
+func TestModel_HandleCommitsLoaded_SetsLoadedOnError(t *testing.T) {
+	m := testModel(nil, nil)
+	m.commits.loadSeq = 5
+	m.commits.loaded = false
+
+	boom := errors.New("vcs blew up")
+	result, cmd := m.Update(commitsLoadedMsg{seq: 5, err: boom})
+	model := result.(Model)
+
+	assert.Nil(t, cmd)
+	assert.True(t, model.commits.loaded, "error result must still mark loaded=true to cache the failure")
+	assert.Equal(t, boom, model.commits.err)
+	assert.Empty(t, model.commits.list)
+}
+
+func TestModel_TriggerReload_RefetchesCommits(t *testing.T) {
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+		return []diff.CommitInfo{{Hash: "fresh"}}, nil
+	}}
+	m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{})
+	m.commits.source = fake
+	m.commits.applicable = true
+	m.commits.loaded = true
+	m.commits.list = []diff.CommitInfo{{Hash: "stale"}}
+	oldSeq := m.commits.loadSeq
+
+	cmd := m.triggerReload()
 
 	assert.False(t, m.commits.loaded, "triggerReload must invalidate commit cache")
-	assert.Nil(t, m.commits.list, "triggerReload must invalidate commit cache")
+	assert.Nil(t, m.commits.list, "triggerReload must clear commit list")
+	assert.Equal(t, oldSeq+1, m.commits.loadSeq, "triggerReload must bump commits.loadSeq")
+	require.NotNil(t, cmd, "triggerReload must return a non-nil batch cmd")
+
+	// execute the batch and find the commitsLoadedMsg to verify the refetch actually runs
+	batch, ok := cmd().(tea.BatchMsg)
+	require.True(t, ok, "triggerReload must return a tea.BatchMsg when both loaders are active")
+	var gotCommits *commitsLoadedMsg
+	for _, inner := range batch {
+		if msg, ok := inner().(commitsLoadedMsg); ok {
+			gotCommits = &msg
+			break
+		}
+	}
+	require.NotNil(t, gotCommits, "batch must include a commitsLoadedMsg")
+	assert.Equal(t, 1, fake.calls, "CommitLog must be called once by the refetch")
+	assert.Equal(t, []diff.CommitInfo{{Hash: "fresh"}}, gotCommits.list, "refetched commits must be fresh, not stale")
+	assert.Equal(t, oldSeq+1, gotCommits.seq, "refetched commits must carry the bumped seq")
 }
 
 func TestModel_TriggerReload_BumpsSeqAndCallsLoadFiles(t *testing.T) {

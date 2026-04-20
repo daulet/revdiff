@@ -285,10 +285,14 @@ type searchState struct {
 	matchSet map[int]bool    // set of file.lines indices that match, computed per render
 }
 
-// commitsState holds the lazy-loaded commit log for the commit-info overlay.
-// loaded is set to true after the first fetch attempt (success or failure) so
-// repeated `i` presses reuse the cached result without re-running the VCS log
-// command. applicable mirrors ModelConfig.CommitsApplicable, copied at
+// commitsState holds the commit log for the commit-info overlay, fetched
+// eagerly at startup (and on R reload) via loadCommits under tea.Batch. loaded
+// flips to true once the first commitsLoadedMsg lands (success or failure) so
+// handleCommitInfo only reads cached state — pressing `i` before the fetch
+// resolves shows a transient "loading commits…" hint instead of triggering a
+// fetch. loadSeq is bumped before each new load; handleCommitsLoaded drops
+// messages whose seq no longer matches, discarding stale in-flight results
+// after a reload. applicable mirrors ModelConfig.CommitsApplicable, copied at
 // construction so the handler can short-circuit without consulting CLI flags.
 // hint holds a transient status-bar message shown once (until the next key
 // press) — set when the user triggers ActionCommitInfo in a mode where the
@@ -302,6 +306,7 @@ type commitsState struct {
 	truncated  bool              // true when the list was capped at diff.MaxCommits
 	err        error             // last fetch error; surfaces in the overlay
 	hint       string            // transient status-bar message; cleared on next key press
+	loadSeq    uint64            // bumped before each new commit-log load; stale commitsLoadedMsg (seq mismatch) is dropped
 }
 
 // reloadState holds the pending-confirmation state for the R reload feature.
@@ -354,7 +359,7 @@ type Model struct {
 	file        loadedFileState   // current file's loaded state (lines, highlights, blame, etc.)
 	search      searchState       // search lifecycle state
 	annot       annotationState   // annotation input lifecycle state
-	commits     commitsState      // lazy-loaded commit log for the commit-info overlay
+	commits     commitsState      // eagerly loaded commit log for the commit-info overlay
 	reload      reloadState       // pending-confirmation state and applicability for R reload
 
 	ready        bool   // true after first WindowSizeMsg
@@ -396,6 +401,14 @@ type filesLoadedMsg struct {
 	entries  []diff.FileEntry
 	err      error
 	warnings []string // non-fatal issues (staged/untracked fetch failures)
+}
+
+// commitsLoadedMsg is sent when the commit log for the current ref range is loaded.
+type commitsLoadedMsg struct {
+	seq       uint64 // matches m.commits.loadSeq at the time the load was issued; mismatched messages are dropped
+	list      []diff.CommitInfo
+	err       error
+	truncated bool
 }
 
 // ModelConfig holds all dependencies and configuration for NewModel.
@@ -587,7 +600,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			source:     cls,
 			applicable: cfg.CommitsApplicable && cls != nil,
 		},
-		reload: reloadState{applicable: cfg.ReloadApplicable},
+		reload:          reloadState{applicable: cfg.ReloadApplicable},
 		loadUntracked:   cfg.LoadUntracked,
 		activeThemeName: cfg.ActiveThemeName,
 	}, nil
@@ -603,26 +616,12 @@ func (m Model) Discarded() bool {
 	return m.discarded
 }
 
-// Init initializes the model by loading changed files.
+// Init initializes the model by loading changed files and the commit log
+// in parallel. loadCommits returns nil when the feature is not applicable
+// (e.g. --stdin, standalone file, working-tree review), so tea.Batch harmlessly
+// drops it in those cases.
 func (m Model) Init() tea.Cmd {
-	return m.loadFiles()
-}
-
-// ensureCommitsLoaded fetches the commit log for the current ref range on the
-// first invocation and caches the result (success or failure) on the model so
-// repeated `i` presses don't re-run the VCS command. No-op when the feature is
-// not applicable, the source is unavailable, or the cache is already populated.
-// Refs do not change mid-session, so the cached result remains valid for the
-// model's lifetime.
-func (m *Model) ensureCommitsLoaded() {
-	if m.commits.loaded || !m.commits.applicable || m.commits.source == nil {
-		return
-	}
-	list, err := m.commits.source.CommitLog(m.cfg.ref)
-	m.commits.list = list
-	m.commits.err = err
-	m.commits.truncated = len(list) >= diff.MaxCommits
-	m.commits.loaded = true
+	return tea.Batch(m.loadFiles(), m.loadCommits())
 }
 
 // Update handles messages and updates the model state.
@@ -637,6 +636,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleResize(msg)
 	case filesLoadedMsg:
 		return m.handleFilesLoaded(msg)
+	case commitsLoadedMsg:
+		return m.handleCommitsLoaded(msg)
 	case fileLoadedMsg:
 		return m.handleFileLoaded(msg)
 	case blameLoadedMsg:
@@ -747,15 +748,19 @@ func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
 
 // handleCommitInfo opens the commit-info overlay when the feature is available
 // in the current mode, otherwise sets a transient status-bar hint so the key
-// press produces visible feedback instead of appearing inert. Uses the lazy
-// cache in commitsState so the underlying VCS log command runs at most once
-// per session.
+// press produces visible feedback instead of appearing inert. Reads from the
+// cache populated eagerly by loadCommits at startup / reload; if the fetch has
+// not yet landed (commits.loaded=false), shows a transient "loading commits…"
+// hint instead of opening the overlay.
 func (m *Model) handleCommitInfo() {
 	if !m.commits.applicable || m.commits.source == nil {
 		m.commits.hint = "no commits in this mode"
 		return
 	}
-	m.ensureCommitsLoaded()
+	if !m.commits.loaded {
+		m.commits.hint = "loading commits…"
+		return
+	}
 	m.overlay.OpenCommitInfo(overlay.CommitInfoSpec{
 		Commits:    m.commits.list,
 		Applicable: true,

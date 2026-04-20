@@ -66,6 +66,30 @@ func (m Model) loadFiles() tea.Cmd {
 	}
 }
 
+// loadCommits returns a command that fetches the commit log for the current ref range.
+// returns nil when the feature is not applicable or no source is configured, so callers
+// can unconditionally include it in tea.Batch alongside loadFiles.
+// the caller must bump m.commits.loadSeq before invoking loadCommits when issuing a new
+// reload (e.g. triggerReload); the captured seq tags every emitted commitsLoadedMsg
+// so handleCommitsLoaded can drop stale results from earlier in-flight loads.
+func (m Model) loadCommits() tea.Cmd {
+	if !m.commits.applicable || m.commits.source == nil {
+		return nil
+	}
+	seq := m.commits.loadSeq
+	ref := m.cfg.ref
+	src := m.commits.source
+	return func() tea.Msg {
+		list, err := src.CommitLog(ref)
+		return commitsLoadedMsg{
+			seq:       seq,
+			list:      list,
+			err:       err,
+			truncated: len(list) >= diff.MaxCommits,
+		}
+	}
+}
+
 // loadFileDiff returns a command that fetches the diff lines for the given file.
 func (m Model) loadFileDiff(file string) tea.Cmd {
 	seq := m.file.loadSeq
@@ -100,18 +124,21 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// triggerReload triggers a full reload of the file list and current file diff.
-// It bumps filesLoadSeq to invalidate any in-flight loads, then re-runs
-// the same two-phase pipeline as startup. The selected file in the tree is
+// triggerReload triggers a full reload of the file list, current file diff,
+// and commit log. It bumps filesLoadSeq and commits.loadSeq to invalidate any
+// in-flight loads, clears the commit cache so the overlay shows the loading
+// hint (not stale data) while the re-fetch is in flight, then re-runs the same
+// parallel pipeline as startup via tea.Batch. The selected file in the tree is
 // restored by SelectByPath in handleFilesLoaded; the diff cursor resets to
 // the top of the file. Named triggerReload (not reload) to avoid shadowing
 // the Model.reload field.
 func (m *Model) triggerReload() tea.Cmd {
 	m.filesLoadSeq++
 	m.file.loadSeq++ // invalidate in-flight fileLoadedMsg from pre-reload selection
-	m.commits.loaded = false // invalidate commit cache so i re-fetches after reload
+	m.commits.loadSeq++
+	m.commits.loaded = false
 	m.commits.list = nil
-	return m.loadFiles()
+	return tea.Batch(m.loadFiles(), m.loadCommits())
 }
 
 // handleFilesLoaded processes the result of loadFiles, populating the file tree
@@ -164,6 +191,22 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.file.loadSeq++
 		return m, m.loadFileDiff(f)
 	}
+	return m, nil
+}
+
+// handleCommitsLoaded processes the result of loadCommits, populating the
+// cached commit log on the model. Drops stale results from earlier in-flight
+// loads (triggered by R reload) via the seq tag, mirroring handleFilesLoaded.
+// An error is cached the same way as success: loaded is set to true so the
+// overlay shows the error once instead of re-triggering the fetch.
+func (m Model) handleCommitsLoaded(msg commitsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.seq != m.commits.loadSeq {
+		return m, nil
+	}
+	m.commits.list = msg.list
+	m.commits.err = msg.err
+	m.commits.truncated = msg.truncated
+	m.commits.loaded = true
 	return m, nil
 }
 
