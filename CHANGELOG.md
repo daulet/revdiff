@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.25.0 - 2026-04-23
+
+### New Features
+
+- vim-motion preset (--vim-motion, off by default) #147 @umputun
+- line-count labels on compact-mode dividers (⋯ N lines ⋯) #146 @umputun
+
+### Bug Fixes
+
+- avoid silent death and destructive fallback in cmux launcher a978f21
+
 ## v0.24.0 - 2026-04-23
 
 ### New Features
