@@ -50,6 +50,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 ## Website
 - Static site in `site/` (index.html, docs.html, style.css), deployed to revdiff.com via Cloudflare Pages
+- Cloudflare Pages strips `.html` and 308-redirects `/docs.html` → `/docs`. Canonical tags, `og:url`, and `sitemap.xml` entries for documentation pages must use the extension-less URL (`/docs`), not the source filename (`/docs.html`), or Google indexes a redirect and tanks CTR
 - `site/docs.html` must stay in sync with README.md - when adding features, flags, keybindings, or modes, update both
 - `site/index.html` landing page should reflect major new features in the features grid and plugin sections
 - **CRITICAL: After each release, update the version badge in `site/index.html`** (search for `hero-badge` div) and `softwareVersion` in JSON-LD

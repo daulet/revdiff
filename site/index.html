@@ -3,22 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>revdiff — Code Review for AI Agents - Claude Code, Codex, OpenCode, and pi</title>
-    <meta name="description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin, Codex plugin, OpenCode integration, and a pi package.">
-    <meta name="keywords" content="code review for ai agents, code review for claude code, code review for codex, code review for opencode, code review for pi, plan review for claude code, tui diff viewer, terminal code review, inline annotations, claude code plugin, codex plugin, opencode integration, pi package, ai code review tool">
+    <title>revdiff — Diff Review TUI for Claude Code & AI Agents</title>
+    <meta name="description" content="Terminal UI for reviewing diffs, plans, and documents with inline annotations. Ships as a Claude Code, Codex, and OpenCode plugin. Git, Mercurial, Jujutsu.">
     <meta name="author" content="umputun">
     <link rel="canonical" href="https://revdiff.com/">
 
-    <meta property="og:title" content="revdiff — Code Review for AI Agents - Claude Code, Codex, OpenCode, and pi">
-    <meta property="og:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin, Codex plugin, OpenCode integration, and a pi package.">
+    <meta property="og:title" content="revdiff — Diff Review TUI for Claude Code & AI Agents">
+    <meta property="og:description" content="Terminal UI for reviewing diffs, plans, and documents with inline annotations. Ships as a Claude Code, Codex, and OpenCode plugin. Git, Mercurial, Jujutsu.">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://revdiff.com">
+    <meta property="og:url" content="https://revdiff.com/">
     <meta property="og:image" content="https://revdiff.com/assets/screenshot.png">
     <meta property="og:site_name" content="revdiff">
 
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="revdiff — Code Review for AI Agents - Claude Code, Codex, OpenCode, and pi">
-    <meta name="twitter:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin, Codex plugin, OpenCode integration, and a pi package.">
+    <meta name="twitter:title" content="revdiff — Diff Review TUI for Claude Code & AI Agents">
+    <meta name="twitter:description" content="Terminal UI for reviewing diffs, plans, and documents with inline annotations. Ships as a Claude Code, Codex, and OpenCode plugin. Git, Mercurial, Jujutsu.">
     <meta name="twitter:image" content="https://revdiff.com/assets/screenshot.png">
 
     <script type="application/ld+json">
@@ -44,6 +43,63 @@
         "softwareVersion": "0.25.1",
         "downloadUrl": "https://github.com/umputun/revdiff/releases",
         "codeRepository": "https://github.com/umputun/revdiff"
+    }
+    </script>
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": "What is revdiff?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "revdiff is a terminal UI for reviewing diffs, files, and documents with inline annotations. It is designed as the human review layer for AI coding agents like Claude Code, Codex, and OpenCode: you annotate the diff, quit, and the structured annotations are passed back to the agent to apply fixes."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "How do I review diffs in the terminal with Claude Code?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Install the revdiff Claude Code plugin with /plugin marketplace add umputun/revdiff and /plugin install revdiff@umputun-revdiff, then run /revdiff to review uncommitted changes in a terminal overlay. Add inline annotations on lines you want changed, quit, and Claude reads the annotations and applies fixes."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Does revdiff support Mercurial and Jujutsu?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Yes. revdiff auto-detects Git, Mercurial (hg), and Jujutsu (jj) repositories. Diffs and blame work across all three backends. In colocated jj/git repos, jj wins by default. The --all-files mode is supported for git and jj."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Which terminals does revdiff work with?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "As a Claude Code plugin, revdiff opens as an overlay using the host terminal multiplexer or terminal: tmux, zellij, kitty, wezterm, kaku, cmux, ghostty, iTerm2, and Emacs vterm. The launcher detects the environment automatically."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Is revdiff free and open source?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Yes. revdiff is free and open source under the MIT License. Source is available on GitHub at github.com/umputun/revdiff. Install via Homebrew, the AUR, deb/rpm packages, or download binaries from GitHub Releases."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "What output format does revdiff produce?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "On quit, revdiff writes structured annotations to stdout in plain markdown-style blocks: ## file:line (type) headers followed by your note. The format is designed to be piped into AI agents, scripts, or any tool. Use --output to write to a file instead."
+                }
+            }
+        ]
     }
     </script>
 
