@@ -45,7 +45,6 @@
 
 html {
     scroll-padding-top: 72px;
-    overflow-x: hidden;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -58,7 +57,15 @@ body {
     color: var(--text);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
+}
+
+/* iOS Safari momentum bounce can flash horizontal scroll on touch devices.
+   Scoped to mobile so position:sticky works on desktop (overflow-x:hidden
+   on html/body breaks sticky descendants). */
+@media (max-width: 900px) {
+    html, body {
+        overflow-x: hidden;
+    }
 }
 
 a { color: var(--accent); text-decoration: none; transition: color 0.15s; }
