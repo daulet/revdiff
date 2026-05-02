@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.0.0 - 2026-05-01
+
+First stable release. CLI flags, env vars, config file format, theme format, keybindings format, annotation output format, and plugin contracts (Claude Code, Codex, pi) are now considered stable — SemVer applies going forward, no breaking changes without a major version bump.
+
+### New Features
+
+- `--compare-old=<path> --compare-new=<path>` — two-file diff for rolling agent reviews #163 @rashpile
+- `--wrap-indent` for hanging-indent wrap continuations on long markdown bullets #166 @umputun
+
+### Improvements
+
+- mute the `↪` wrap continuation marker with MutedFg #166 @umputun
+
 ## v0.28.0 - 2026-05-01
 
 ### New Features
