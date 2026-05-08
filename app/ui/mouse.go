@@ -190,15 +190,16 @@ func (m Model) wheelStepFor(zone hitZone, shift bool) int {
 // delta is positive for wheel-down, negative for wheel-up. the pane is
 // selected by the hit zone, not the current pane focus: users expect the
 // wheel to act on whichever pane the pointer is over.
+//
+// diff-pane wheel scrolls the viewport only; the diff cursor stays on its
+// current logical line unless the line is scrolled out of view, in which
+// case the cursor is pinned to the topmost or bottommost visible line so
+// the highlight stays on screen. this matches less/vim mouse behavior and
+// keeps the cursor from being yanked along with the wheel.
 func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 	switch zone {
 	case hitDiff:
-		switch {
-		case delta > 0:
-			m.moveDiffCursorDownBy(delta)
-		case delta < 0:
-			m.moveDiffCursorUpBy(-delta)
-		}
+		m.scrollDiffViewportBy(delta)
 		m.syncTOCActiveSection()
 	case hitTree:
 		motion := sidepane.MotionPageDown
@@ -246,6 +247,76 @@ func (m Model) clickTree(y int) (tea.Model, tea.Cmd) {
 	m.pendingAnnotJump = nil
 	m.nav.pendingHunkJump = nil
 	return m.loadSelectedIfChanged()
+}
+
+// scrollDiffViewportBy shifts the diff viewport's YOffset by delta and pins
+// the diff cursor to the visible range when the cursor would otherwise leave
+// the viewport. delta > 0 scrolls down, delta < 0 scrolls up. no-op when no
+// file is loaded or the clamped target equals the current offset.
+// the content is re-rendered only when the cursor moves — a pure viewport
+// shift does not need a re-render since the rendered content is unchanged.
+func (m *Model) scrollDiffViewportBy(delta int) {
+	if m.file.name == "" {
+		return
+	}
+	maxOffset := max(0, m.layout.viewport.TotalLineCount()-m.layout.viewport.Height)
+	current := m.layout.viewport.YOffset
+	target := max(0, min(current+delta, maxOffset))
+	if target == current {
+		return
+	}
+	cursorMoved := m.pinDiffCursorTo(target)
+	if cursorMoved {
+		m.layout.viewport.SetContent(m.renderDiff())
+	}
+	m.layout.viewport.SetYOffset(target)
+}
+
+// pinDiffCursorTo moves the diff cursor onto the visible viewport range when it
+// would otherwise be off-screen at newOffset; when the cursor marker is already
+// within the viewport, it is left alone. when the cursor sits above the viewport,
+// it is pinned to the topmost visible row; when below, to the bottommost visible
+// row. returns true when the cursor actually changed position (idx or annotation
+// flag), so callers know whether a re-render is required.
+//
+// the in-view check uses cursorTop (first visual row, where the cursor marker is
+// rendered) rather than cursorBottom. in wrap mode a diff line spans multiple rows;
+// using cursorBottom would incorrectly treat the cursor as visible when only its
+// tail wrap-continuation rows are in the viewport while the marker row is above it.
+//
+// for the top-pin case, if the cursor line straddles the viewport top boundary
+// (cursorTop < viewTop <= cursorBottom) the target row is advanced past the
+// cursor line's last visual row so that the next line — whose marker is inside
+// the viewport — is selected. when the entire wrapped span exceeds the viewport
+// height the advance is clamped to viewBottom and the function returns false
+// (no visible alternative exists).
+func (m *Model) pinDiffCursorTo(newOffset int) bool {
+	if len(m.file.lines) == 0 {
+		return false
+	}
+	cursorTop, cursorBottom := m.cursorVisualRange()
+	viewTop := newOffset
+	viewBottom := newOffset + m.layout.viewport.Height - 1
+	if cursorTop >= viewTop && cursorTop <= viewBottom {
+		return false // cursor marker already visible
+	}
+	targetRow := viewBottom
+	if cursorTop < viewTop {
+		// cursor is above the viewport; in wrap mode the cursor line may have
+		// continuation rows visible at viewTop — advance past them.
+		if cursorBottom >= viewTop {
+			targetRow = min(cursorBottom+1, viewBottom)
+		} else {
+			targetRow = viewTop
+		}
+	}
+	idx, onAnnot := m.visualRowToDiffLine(targetRow)
+	if idx == m.nav.diffCursor && onAnnot == m.annot.cursorOnAnnotation {
+		return false
+	}
+	m.nav.diffCursor = idx
+	m.annot.cursorOnAnnotation = onAnnot
+	return true
 }
 
 // clickDiff handles a left-click press in the diff viewport. the click
