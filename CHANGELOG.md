@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.1.0 - 2026-05-07
+
+### New Features
+
+- in-session search history recall (Up/Ctrl+P, Down/Ctrl+N) #171 @umputun
+
+### Improvements
+
+- bump github.com/alecthomas/chroma/v2 from 2.23.1 to 2.24.1 #168 @dependabot
+- bump indirect deps (go-isatty, x/sys, x/text) to latest patch versions 86b530c
+
 ## v1.0.0 - 2026-05-01
 
 First stable release. CLI flags, env vars, config file format, theme format, keybindings format, annotation output format, and plugin contracts (Claude Code, Codex, pi) are now considered stable — SemVer applies going forward, no breaking changes without a major version bump.
