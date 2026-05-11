@@ -323,6 +323,65 @@ func TestParseArgs_Blame(t *testing.T) {
 	})
 }
 
+func TestParseArgs_Untracked(t *testing.T) {
+	t.Run("default off", func(t *testing.T) {
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.False(t, opts.Untracked)
+	})
+
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--untracked"))
+		require.NoError(t, err)
+		assert.True(t, opts.Untracked)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_UNTRACKED", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.Untracked)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nuntracked = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.Untracked)
+	})
+}
+
+func TestOptions_StartupUntracked(t *testing.T) {
+	mk := func(untracked, staged bool, base, against string) options {
+		var o options
+		o.Untracked = untracked
+		o.Staged = staged
+		o.Refs.Base = base
+		o.Refs.Against = against
+		return o
+	}
+	cases := []struct {
+		name string
+		opts options
+		want bool
+	}{
+		{"flag off", mk(false, false, "", ""), false},
+		{"flag on, no ref", mk(true, false, "", ""), true},
+		{"flag on with --staged (no positional ref)", mk(true, true, "", ""), true},
+		{"flag on, single ref", mk(true, false, "main", ""), true},
+		{"flag on, two refs (a b form)", mk(true, false, "main", "feature"), false},
+		{"flag on, dot-dot ref (a..b form)", mk(true, false, "main..feature", ""), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.opts.startupUntracked())
+		})
+	}
+}
+
 func TestParseArgs_WordDiff(t *testing.T) {
 	t.Run("default off", func(t *testing.T) {
 		opts, err := parseArgs(noConfigArgs(t))

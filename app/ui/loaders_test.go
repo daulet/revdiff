@@ -332,6 +332,92 @@ func TestModel_FilterOnlyNoMatchShowsMessage(t *testing.T) {
 	assert.Contains(t, model.layout.viewport.View(), "no files match --only filter")
 }
 
+func TestModel_UntrackedStartup(t *testing.T) {
+	t.Run("ShowUntracked=true with LoadUntracked initializes showUntracked on", func(t *testing.T) {
+		renderer := &mocks.RendererMock{}
+		store := annotation.NewStore()
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			TreeWidthRatio: 3,
+			ShowUntracked:  true,
+			LoadUntracked:  func() ([]string, error) { return nil, nil },
+		})
+		assert.True(t, m.modes.showUntracked)
+	})
+
+	t.Run("ShowUntracked=true without LoadUntracked stays off", func(t *testing.T) {
+		renderer := &mocks.RendererMock{}
+		store := annotation.NewStore()
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			TreeWidthRatio: 3,
+			ShowUntracked:  true,
+			LoadUntracked:  nil,
+		})
+		assert.False(t, m.modes.showUntracked, "no-op when LoadUntracked is not wired (e.g. stdin, compare modes)")
+	})
+
+	t.Run("ShowUntracked=false stays off even with LoadUntracked wired", func(t *testing.T) {
+		renderer := &mocks.RendererMock{}
+		store := annotation.NewStore()
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			TreeWidthRatio: 3,
+			ShowUntracked:  false,
+			LoadUntracked:  func() ([]string, error) { return nil, nil },
+		})
+		assert.False(t, m.modes.showUntracked)
+	})
+
+	t.Run("startup loadFiles appends untracked entries when ShowUntracked=true", func(t *testing.T) {
+		renderer := &mocks.RendererMock{
+			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+				return []diff.FileEntry{{Path: "main.go", Status: diff.FileModified}}, nil
+			},
+		}
+		store := annotation.NewStore()
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			TreeWidthRatio: 3,
+			ShowUntracked:  true,
+			LoadUntracked:  func() ([]string, error) { return []string{"newfile.go"}, nil },
+		})
+		require.True(t, m.modes.showUntracked)
+
+		msg := m.loadFiles()()
+		flMsg, ok := msg.(filesLoadedMsg)
+		require.True(t, ok)
+		paths := make([]string, 0, len(flMsg.entries))
+		for _, e := range flMsg.entries {
+			paths = append(paths, e.Path)
+		}
+		assert.Contains(t, paths, "main.go")
+		assert.Contains(t, paths, "newfile.go")
+	})
+
+	t.Run("staged + untracked compose: both appear in startup load", func(t *testing.T) {
+		renderer := &mocks.RendererMock{
+			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+				assert.True(t, staged, "staged flag should be propagated to ChangedFiles")
+				return []diff.FileEntry{{Path: "staged.go", Status: diff.FileAdded}}, nil
+			},
+		}
+		store := annotation.NewStore()
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			TreeWidthRatio: 3,
+			Staged:         true,
+			ShowUntracked:  true,
+			LoadUntracked:  func() ([]string, error) { return []string{"newfile.go"}, nil },
+		})
+
+		msg := m.loadFiles()()
+		flMsg, ok := msg.(filesLoadedMsg)
+		require.True(t, ok)
+		paths := make([]string, 0, len(flMsg.entries))
+		for _, e := range flMsg.entries {
+			paths = append(paths, e.Path)
+		}
+		assert.Contains(t, paths, "staged.go")
+		assert.Contains(t, paths, "newfile.go")
+	})
+}
+
 func TestModel_UntrackedToggle(t *testing.T) {
 	t.Run("toggle cycles showUntracked and reloads files", func(t *testing.T) {
 		entries := []diff.FileEntry{{Path: "main.go", Status: diff.FileModified}}
