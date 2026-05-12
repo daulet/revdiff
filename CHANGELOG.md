@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.2.1 - 2026-05-12
+
+### Improvements
+
+- annotation visual-row chokepoint with row cache #183 @umputun
+
+### Other
+
+- pi revdiff review agent tool #182 @melonamin
+
 ## v1.2.0 - 2026-05-11
 
 ### New Features
