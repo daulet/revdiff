@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.3.0 - 2026-05-13
+
+### New Features
+
+- configurable annotation marker #185 @jknlsn
+- make open-editor binding configurable via keymap (#190) #192 @umputun
+
+### Improvements
+
+- scale annot_list popup width up to 140 cols on wide terminals (#191) #195 @umputun
+
+### Bug Fixes
+
+- fix note about sandbox `excludedCommands` #189 @plasticine
+
+### Other
+
+- cleanup: drop dead annotationMarker field, broaden marker error message 572de2a
+
 ## v1.2.1 - 2026-05-12
 
 ### Improvements
